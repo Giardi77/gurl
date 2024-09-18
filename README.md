@@ -1,6 +1,6 @@
 ![Logo](gurl_logo.png)
 
-<h4 align="center">Download files fast from terminal 🚀</h4>
+<h4 align="center"> Download files fast from terminal </h4>
 
 <p align="center">
   <a href="#features">Features</a> •
