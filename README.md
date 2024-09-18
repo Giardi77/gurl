@@ -32,8 +32,8 @@ gurl supports various options for flexible file downloading:
 
 ### Other useful
     
-gurl -t <threads> # Set number of concurrent downloads (Default maximum possible)
-gurl -timeout <seconds> # Set timeout for each download
-gurl -H "Key: Value" # Add custom HTTP headers (More than one accepted)
-gurl -s # Silent mode (no output)
-gurl -o <directory> # Set output directory
+ - `gurl -t <threads>` # Set number of concurrent downloads (Default maximum possible)
+ - `gurl -timeout <seconds>` # Set timeout for each download
+ - `gurl -H "Key: Value"` # Add custom HTTP headers (More than one accepted)
+ - `gurl -s` # Silent mode (no output)
+ - `gurl -o <directory>` # Set output directory
