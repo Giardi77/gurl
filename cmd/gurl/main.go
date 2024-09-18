@@ -13,6 +13,19 @@ import (
 
 const version = "1.0.0"
 
+const logo = `
+                                            
+  ,ad8888ba,                            88  
+ d8"'    '"8b                           88  
+d8'                                     88  
+88             88       88  8b,dPPYba,  88  
+88      88888  88       88  88P'   "Y8  88  
+Y8,        88  88       88  88          88  
+ Y8a.    .a88  "8a,   ,a88  88          88  
+  '"Y88888P"    '"YbbdP'Y8  88          88  
+                                                                                            
+`
+
 func main() {
 	var (
 		url         string
@@ -33,11 +46,13 @@ func main() {
 	flag.Var(&headers, "H", "Custom HTTP header in the format 'key: value' (can be used multiple times)")
 	flag.BoolVar(&silent, "s", false, "Silent mode: suppress all output")
 	flag.BoolVar(&silent, "silent", false, "Silent mode: suppress all output")
+	flag.BoolVar(&showVersion, "v", false, "Show version information")
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("gurl version %s\n", version)
+		fmt.Print(logo)
+		//fmt.Printf("version %s\n", version)
 		os.Exit(0)
 	}
 
