@@ -13,10 +13,7 @@
 
 - Download **multiple files** concurrently
 - Support for **custom HTTP headers**
-- **Progress bar** for visual feedback
-- **Silent mode** for script integration
-- **Timeout** settings for each download
-- Handles **rate limiting** and **too many requests** errors
+- Handles **rate limiting** and **too many requests** errors 
 
 # Installation and update
 
@@ -27,11 +24,16 @@
 
 gurl supports various options for flexible file downloading:
 
+### Download:
 
-gurl -u <url> # Download a single URL
-gurl -l <file> # Download URLs from a file
-gurl -t <threads> # Set number of concurrent downloads
+    gurl -u <url>
+    gurl -l <file>
+    cat urls.txt | gurl
+
+### Other useful
+    
+gurl -t <threads> # Set number of concurrent downloads (Default maximum possible)
 gurl -timeout <seconds> # Set timeout for each download
-gurl -H "Key: Value" # Add custom HTTP headers
+gurl -H "Key: Value" # Add custom HTTP headers (More than one accepted)
 gurl -s # Silent mode (no output)
-gurl -o <directory> # Set output directory          # Download a single URL
+gurl -o <directory> # Set output directory
