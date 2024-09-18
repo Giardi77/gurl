@@ -11,15 +11,18 @@ import (
 	"github.com/Giardi77/gurl/internal/downloader"
 )
 
+const version = "1.0.0"
+
 func main() {
 	var (
-		url      string
-		listFile string
-		output   string
-		threads  int
-		timeout  int
-		headers  stringSlice
-		silent   bool
+		url         string
+		listFile    string
+		output      string
+		threads     int
+		timeout     int
+		headers     stringSlice
+		silent      bool
+		showVersion bool
 	)
 
 	flag.StringVar(&url, "u", "", "Single URL to download")
@@ -30,7 +33,13 @@ func main() {
 	flag.Var(&headers, "H", "Custom HTTP header in the format 'key: value' (can be used multiple times)")
 	flag.BoolVar(&silent, "s", false, "Silent mode: suppress all output")
 	flag.BoolVar(&silent, "silent", false, "Silent mode: suppress all output")
+	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("gurl version %s\n", version)
+		os.Exit(0)
+	}
 
 	// Set up output writers based on silent mode
 	var stdout, stderr io.Writer
