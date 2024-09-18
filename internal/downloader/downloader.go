@@ -3,13 +3,20 @@ package downloader
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/schollz/progressbar/v3"
+	"github.com/valyala/fasthttp"
 )
+
+// Global variable to track if we should stop due to too many requests
+var shouldStop atomic.Bool
 
 func GetURLs(url, listFile string) ([]string, error) {
 	var urls []string
@@ -55,77 +62,117 @@ func readUrlsFromFile(filename string) ([]string, error) {
 	return urls, scanner.Err()
 }
 
-func DownloadFiles(urls []string, outputDir string, threads, timeout int) error {
+func DownloadFiles(urls []string, outputDir string, threads, timeout int, headers map[string]string, silent bool) ([]error, error) {
 	if err := os.MkdirAll(outputDir, 0766); err != nil {
-		return fmt.Errorf("error creating output directory: %v", err)
+		return nil, fmt.Errorf("error creating output directory: %v", err)
 	}
 
-	jobs := make(chan string, len(urls))
-	results := make(chan error, len(urls))
+	var wg sync.WaitGroup
+	errors := make(chan error, len(urls))
 
-	// Start worker pool
-	for w := 1; w <= threads; w++ {
-		// Remove the w parameter when calling worker
-		go worker(jobs, results, outputDir, timeout)
+	semaphore := make(chan struct{}, threads)
+
+	client := &fasthttp.Client{
+		ReadTimeout:     time.Duration(timeout) * time.Second,
+		WriteTimeout:    time.Duration(timeout) * time.Second,
+		MaxConnsPerHost: threads,
 	}
 
-	// Send jobs to workers
+	shouldStop.Store(false)
+
+	var bar *progressbar.ProgressBar
+	if !silent {
+		bar = progressbar.Default(int64(len(urls)))
+	}
+
 	for _, url := range urls {
-		jobs <- url
-	}
-	close(jobs)
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
-	// Collect results
-	var errs []string
-	for range urls {
-		if err := <-results; err != nil {
-			errs = append(errs, err.Error())
+			if shouldStop.Load() {
+				errors <- fmt.Errorf("skipped %s due to too many requests", url)
+				if !silent && bar != nil {
+					bar.Add(1)
+				}
+				return
+			}
+
+			if err := downloadFile(client, url, outputDir, headers); err != nil {
+				errors <- err
+			}
+			if !silent && bar != nil {
+				bar.Add(1)
+			}
+		}(url)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	if !silent {
+		fmt.Println() // New line after progress bar
+	}
+
+	var downloadErrors []error
+	for err := range errors {
+		if err != nil {
+			downloadErrors = append(downloadErrors, err)
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("encountered errors: %s", strings.Join(errs, "; "))
+	if shouldStop.Load() {
+		return downloadErrors, fmt.Errorf("downloads stopped due to too many request errors")
 	}
 
-	return nil
+	return downloadErrors, nil
 }
 
-// Remove the id parameter
-func worker(jobs <-chan string, results chan<- error, outputDir string, timeout int) {
-	for url := range jobs {
-		results <- downloadFile(url, outputDir, timeout)
-	}
-}
+func downloadFile(client *fasthttp.Client, url, outputDir string, headers map[string]string) error {
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(req)
+	defer fasthttp.ReleaseResponse(resp)
 
-func downloadFile(url, outputDir string, timeout int) error {
-	client := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
-	}
-
-	resp, err := client.Get(url)
-	if err != nil {
-		return fmt.Errorf("error downloading %s: %v", url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
+	req.SetRequestURI(url)
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 
-	filename := filepath.Base(url)
-	filepath := filepath.Join(outputDir, filename)
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		if err := client.Do(req, resp); err != nil {
+			return fmt.Errorf("[ERROR] %s: %v", url, err)
+		}
 
-	out, err := os.Create(filepath)
-	if err != nil {
-		return fmt.Errorf("error creating file %s: %v", filepath, err)
+		switch resp.StatusCode() {
+		case fasthttp.StatusOK:
+			filename := filepath.Base(url)
+			filepath := filepath.Join(outputDir, filename)
+
+			if err := os.WriteFile(filepath, resp.Body(), 0644); err != nil {
+				return fmt.Errorf("[ERROR] %s: error writing to file: %v", url, err)
+			}
+
+			return nil
+		case fasthttp.StatusTooManyRequests:
+			if i == maxRetries-1 {
+				shouldStop.Store(true)
+				return fmt.Errorf("%s %s: too many requests, stopping further downloads", color.RedString("[%d]", resp.StatusCode()), url)
+			}
+			retryAfter := resp.Header.Peek("Retry-After")
+			if len(retryAfter) > 0 {
+				seconds, _ := time.ParseDuration(string(retryAfter) + "s")
+				time.Sleep(seconds)
+			} else {
+				time.Sleep(time.Duration(i+1) * time.Second)
+			}
+		default:
+			return fmt.Errorf("%s %s", color.RedString("[%d]", resp.StatusCode()), url)
+		}
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return fmt.Errorf("error writing to file %s: %v", filepath, err)
-	}
-
-	fmt.Printf("Downloaded: %s\n", filename)
-	return nil
+	return fmt.Errorf("[ERROR] %s: failed to download after %d retries", url, maxRetries)
 }
