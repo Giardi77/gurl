@@ -52,7 +52,7 @@ func main() {
 
 	if showVersion {
 		fmt.Print(logo)
-		//fmt.Printf("version %s\n", version)
+		fmt.Printf("version %s\n", version)
 		os.Exit(0)
 	}
 
